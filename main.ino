@@ -17,18 +17,56 @@ limitations under the License.
 
 #define MAX_ADDR = 0x2000
 
+#define USE_EXPANDER 1
+#define EXPANDER_ADDR 0x20
+
+#if USE_EXPANDER == 0
+// Arduino Mega
 #define W 23
 #define E1 35
 #define E2 46
 #define G 31
+#else
+// MCP23017
+#define W 2
+#define E1 3
+#define E2 4
+#define G 5
+#endif
 
+#if USE_EXPANDER == 0
 // [A0; A12] Address pins of the M48
-int addressPins[] = {38,36,34,32,30,28,26,24,25,27,33,29,22};
+unsigned int addressPins[] = {38, 36, 34, 32, 30, 28, 26, 24, 25, 27, 33, 29, 22};
 // [DQ0; DQ7] Data pins of the M48T58/M48Y58
-int dataPins[] = {40,42,44,45,43,41,39,37};
+unsigned int dataPins[] = {40, 42, 44, 45, 43, 41, 39, 37};
+#else
+unsigned int dataPins[] = {6, 7, 8, 9, 10, 11, 12, 13};
 
-void initPins(int *pinAddr, int mode) {
-    int *maxAddr = pinAddr + sizeof(pinAddr) / sizeof(*pinAddr) - 1;
+void initExpander(unsigned int i2cAddr) {
+    Wire.beginTransmission(EXPANDER_ADDR);
+    Wire.write(0x00);
+    Wire.write(0x00);
+    Wire.endTransmission()
+    Wire.beginTransmission(EXPANDER_ADDR);
+    Wire.write(0x01);
+    Wire.write(0x00);
+    Wire.endTransmission()
+}
+
+void writeAddrWithExpander(unsigned int addr) {
+    Wire.beginTransmission(EXPANDER_ADDR);
+    Wire.write(0x12);
+    Wire.write(addr & 0xFF);
+    Wire.endTransmission()
+    Wire.beginTransmission(EXPANDER_ADDR);
+    Wire.write(0x13);
+    Wire.write(addr >> 8 & 0xFF);
+    Wire.endTransmission()
+}
+#endif
+
+void initPins(unsigned int *pinAddr, int mode) {
+    unsigned int *maxAddr = pinAddr + sizeof(pinAddr) / sizeof(*pinAddr) - 1;
     while (pinAddr < maxAddr) {
         pinMode(*pinAddr, mode);
         ++pinAddr;
@@ -64,12 +102,20 @@ void setup() {
     pinMode(E2, OUTPUT);
     pinMode(G, OUTPUT);
     setDisable();
+    #if USE_EXPANDER == 0
     initPins(addressPins, OUTPUT);
+    #else
+    initExpander(EXPANDER_ADDR);
+    #endif
 }
 
 void setAddr(unsigned int addr) {
+    #if USE_EXPANDER == 1
+    writeAddrWithExpander(addr);
+    #else
     for (unsigned int i=0; i < 13; ++i)
         digitalWrite(addressPins[i], (addr >> i) & 1);
+    #endif
 }
 
 byte readData() {
